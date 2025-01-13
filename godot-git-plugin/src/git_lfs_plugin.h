@@ -1,0 +1,52 @@
+#pragma once
+
+#include "godot_cpp/classes/editor_plugin.hpp"
+#include "godot_cpp/classes/editor_inspector_plugin.hpp"
+#include "godot_cpp/classes/editor_property.hpp"
+#include "godot_cpp/classes/button_group.hpp"
+#include "godot_cpp/classes/button.hpp"
+
+#include "godot_cpp/variant/callable.hpp"
+#include "godot_cpp/classes/project_settings.hpp"
+
+class GitLFSInspectorPlugin : public godot::EditorInspectorPlugin
+{
+    GDCLASS(GitLFSInspectorPlugin, godot::EditorInspectorPlugin);
+
+public:
+
+    GitLFSInspectorPlugin();
+    ~GitLFSInspectorPlugin();
+
+    static void _bind_methods();
+
+    bool _can_handle(Object* object) const;
+
+    //bool _parse_property(Object *object, godot::Variant::Type type, const godot::String &name, godot::PropertyHint hint_type, const godot::String &hint_string, godot::BitField<godot::PropertyUsageFlags> usage_flags, bool wide) override;
+    void _parse_begin(Object* object) override;
+    void _parse_end(Object* object) override;
+
+    godot::ProjectSettings* project_settings;
+    
+    godot::Button* GitLFSCheckOutButton;
+};
+
+class GitLFSPlugin : public godot::EditorPlugin
+{
+    GDCLASS(GitLFSPlugin, godot::EditorPlugin);
+
+public:
+
+    GitLFSPlugin();
+    ~GitLFSPlugin();
+    godot::String _get_plugin_name() const override { return "GitLFSPlugin"; }
+
+    static void _bind_methods();
+
+    void _enter_tree() override;
+    void _exit_tree() override;
+
+    godot::Ref<GitLFSInspectorPlugin> InspectorPlugin;
+    //godot::Control* LFSControl;
+    //godot::Button* LFSCheckOutButton;
+};
