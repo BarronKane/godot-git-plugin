@@ -10,7 +10,11 @@ config_version=5
 
 [application]
 
-config/features=PackedStringArray("4.1")
+config/features=PackedStringArray("4.3")
+
+[dotnet]
+
+project/assembly_name="UnnamedProject"
 
 [editor]
 
