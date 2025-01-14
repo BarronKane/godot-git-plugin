@@ -6,6 +6,7 @@
 #include "godot_cpp/classes/h_box_container.hpp"
 #include "godot_cpp/classes/button_group.hpp"
 #include "godot_cpp/classes/button.hpp"
+#include "godot_cpp/classes/label.hpp"
 
 #include "godot_cpp/variant/callable.hpp"
 #include "godot_cpp/classes/project_settings.hpp"
@@ -21,6 +22,11 @@ public:
     GitLFSHBoxContainer();
     ~GitLFSHBoxContainer();
 
+    void InitElements(const godot::String &assetPath);
+
+    godot::String AssetPath;
+
+    godot::Label* title;
     godot::Button* GitLFSCheckoutButton;
 };
 

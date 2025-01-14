@@ -31,6 +31,23 @@ GitLFSHBoxContainer::~GitLFSHBoxContainer()
 {
 }
 
+void GitLFSHBoxContainer::InitElements(const godot::String &assetPath)
+{
+    AssetPath = assetPath;
+
+    title = memnew(godot::Label);
+    title->set_text("Git LFS Controls");
+    title->set_modulate(godot::Color(255,255,255));
+    title->set_horizontal_alignment(godot::HorizontalAlignment::HORIZONTAL_ALIGNMENT_LEFT);
+    title->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
+
+    GitLFSCheckoutButton = memnew(godot::Button);
+    GitLFSCheckoutButton->set_text("Checkout Asset");
+
+    add_child(title);
+    add_child(GitLFSCheckoutButton);
+}
+
 /////////////////////////////////////////////////////////////
 
 GitLFSInspectorPlugin::GitLFSInspectorPlugin()
@@ -51,8 +68,13 @@ void GitLFSInspectorPlugin::_bind_methods()
 
 bool GitLFSInspectorPlugin::_can_handle(Object* object) const
 {
-    //return object->has_method("_add_inspector_buttons");
-    return true;
+    godot::Variant::Type type = static_cast<godot::Variant::Type>(object->get("resource_path").get_type());
+    if (type != godot::Variant::NIL)
+    {
+        return true;       
+    }
+
+    return false;
 }
 
 /*
@@ -67,8 +89,12 @@ void GitLFSInspectorPlugin::_parse_category(Object *p_object, const godot::Strin
 {
     if (p_category == "Resource")
     {
+        const godot::String resource_path = p_object->get("resource_path");
+        const godot::String resource_file = project_settings->globalize_path(resource_path);
+
         GitLFSHBoxContainer* lfs_hbox_container = memnew(GitLFSHBoxContainer);
         lfs_hbox_container->set_alignment(godot::BoxContainer::AlignmentMode::ALIGNMENT_CENTER);
+        lfs_hbox_container->InitElements(resource_file);
         
         add_custom_control(lfs_hbox_container);
         /*
@@ -86,22 +112,7 @@ void GitLFSInspectorPlugin::_parse_begin(Object* object)
     //godot::UtilityFunctions::print("GitLFSInspectorPlugin Parsing");
     //object->set("LFS Checked Out", godot::Variant::BOOL);
 
-    godot::Variant::Type type = static_cast<godot::Variant::Type>(object->get("resource_path").get_type());
-    if (type != godot::Variant::NIL)
-    {
-        
-        // This is a valid resource item, and has a disk location.
-        const godot::String resource_path = object->get("resource_path");
-        const godot::String resource_file = project_settings->globalize_path(resource_path);
-        /*
-        godot::UtilityFunctions::print(resource_file);
-        GitLFSHBoxContainer* lfs_hbox_container = memnew(GitLFSHBoxContainer);
-        //object->add_custom_control(lfs_hbox_container);
-        object->call("add_custom_control", lfs_hbox_container);
-        */
-       godot::Label* pLabel = memnew(godot::Label);
-       add_custom_control(pLabel);
-    }
+    
 }
 
 void GitLFSInspectorPlugin::_parse_end(Object* object)
