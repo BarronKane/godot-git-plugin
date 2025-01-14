@@ -11,7 +11,8 @@ void initialize_git_plugin_module(godot::ModuleInitializationLevel p_level) {
 	}
 
 	godot::ClassDB::register_class<GitPlugin>();
-	
+
+	godot::ClassDB::register_class<GitLFSHBoxContainer>();
 	godot::ClassDB::register_class<GitLFSInspectorPlugin>();
 	godot::ClassDB::register_class<GitLFSPlugin>();	
 

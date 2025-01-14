@@ -2,9 +2,36 @@
 
 #include "godot_cpp/classes/button_group.hpp"
 #include "godot_cpp/classes/button.hpp"
+#include "godot_cpp/classes/label.hpp"
 
 #include "godot_cpp/classes/project_settings.hpp"
 #include "godot_cpp/variant/utility_functions.hpp"
+
+void GitLFSHBoxContainer::_bind_methods()
+{
+}
+
+GitLFSHBoxContainer::GitLFSHBoxContainer()
+{
+    set_alignment(AlignmentMode::ALIGNMENT_CENTER);
+    set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
+
+    GitLFSCheckoutButton = memnew(godot::Button);
+    GitLFSCheckoutButton->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
+    GitLFSCheckoutButton->set_text("Git LFS Checkout");
+    GitLFSCheckoutButton->set_modulate(godot::Color(255, 255, 255));
+    GitLFSCheckoutButton->set_disabled(false);
+    GitLFSCheckoutButton->set_action_mode(godot::BaseButton::ActionMode::ACTION_MODE_BUTTON_PRESS);
+
+    GitLFSCheckoutButton->set_flat(false);
+    GitLFSCheckoutButton->set_text_alignment(godot::HorizontalAlignment::HORIZONTAL_ALIGNMENT_CENTER);
+}
+
+GitLFSHBoxContainer::~GitLFSHBoxContainer()
+{
+}
+
+/////////////////////////////////////////////////////////////
 
 GitLFSInspectorPlugin::GitLFSInspectorPlugin()
 {
@@ -15,7 +42,6 @@ GitLFSInspectorPlugin::GitLFSInspectorPlugin()
 
 GitLFSInspectorPlugin::~GitLFSInspectorPlugin()
 {
-
     godot::UtilityFunctions::print("GitLFSInspectorPlugin deinitialized.");
 }
 
@@ -26,7 +52,6 @@ void GitLFSInspectorPlugin::_bind_methods()
 bool GitLFSInspectorPlugin::_can_handle(Object* object) const
 {
     //return object->has_method("_add_inspector_buttons");
-    godot::UtilityFunctions::print("Check handle.");
     return true;
 }
 
@@ -38,6 +63,23 @@ bool GitLFSInspectorPlugin::_parse_property(godot::Object *object, godot::Varian
 }
 */
 
+void GitLFSInspectorPlugin::_parse_category(Object *p_object, const godot::String &p_category)
+{
+    if (p_category == "Resource")
+    {
+        GitLFSHBoxContainer* lfs_hbox_container = memnew(GitLFSHBoxContainer);
+        lfs_hbox_container->set_alignment(godot::BoxContainer::AlignmentMode::ALIGNMENT_CENTER);
+        
+        add_custom_control(lfs_hbox_container);
+        /*
+        godot::Button* pAddButton = memnew(godot::Button);
+        pAddButton->set_text("Git LFS Checkout");
+        pAddButton->set_action_mode(godot::BaseButton::ACTION_MODE_BUTTON_PRESS);
+        add_custom_control(pAddButton);
+        */
+    }
+}
+
 
 void GitLFSInspectorPlugin::_parse_begin(Object* object)
 {
@@ -47,10 +89,18 @@ void GitLFSInspectorPlugin::_parse_begin(Object* object)
     godot::Variant::Type type = static_cast<godot::Variant::Type>(object->get("resource_path").get_type());
     if (type != godot::Variant::NIL)
     {
+        
         // This is a valid resource item, and has a disk location.
         const godot::String resource_path = object->get("resource_path");
         const godot::String resource_file = project_settings->globalize_path(resource_path);
+        /*
         godot::UtilityFunctions::print(resource_file);
+        GitLFSHBoxContainer* lfs_hbox_container = memnew(GitLFSHBoxContainer);
+        //object->add_custom_control(lfs_hbox_container);
+        object->call("add_custom_control", lfs_hbox_container);
+        */
+       godot::Label* pLabel = memnew(godot::Label);
+       add_custom_control(pLabel);
     }
 }
 
