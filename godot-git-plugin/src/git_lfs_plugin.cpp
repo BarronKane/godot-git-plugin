@@ -4,11 +4,13 @@
 #include "godot_cpp/classes/button.hpp"
 #include "godot_cpp/classes/label.hpp"
 
+#include "godot_cpp/core/class_db.hpp"
 #include "godot_cpp/classes/project_settings.hpp"
 #include "godot_cpp/variant/utility_functions.hpp"
 
 void GitLFSHBoxContainer::_bind_methods()
 {
+    godot::ClassDB::bind_method(godot::D_METHOD("_update_elements"), &GitLFSHBoxContainer::_update_elements);
 }
 
 GitLFSHBoxContainer::GitLFSHBoxContainer()
@@ -41,11 +43,20 @@ void GitLFSHBoxContainer::InitElements(const godot::String &assetPath)
     title->set_horizontal_alignment(godot::HorizontalAlignment::HORIZONTAL_ALIGNMENT_LEFT);
     title->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
 
+    update_elements_control = godot::Callable(this, "_update_elements");
+
     GitLFSCheckoutButton = memnew(godot::Button);
     GitLFSCheckoutButton->set_text("Checkout Asset");
+    GitLFSCheckoutButton->set_action_mode(godot::BaseButton::ACTION_MODE_BUTTON_PRESS);
+    GitLFSCheckoutButton->connect("pressed", update_elements_control);
 
     add_child(title);
     add_child(GitLFSCheckoutButton);
+}
+
+void GitLFSHBoxContainer::_update_elements()
+{
+    title->set_text("Updated!");
 }
 
 /////////////////////////////////////////////////////////////

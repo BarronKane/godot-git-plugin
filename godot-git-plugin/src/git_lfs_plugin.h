@@ -24,10 +24,14 @@ public:
 
     void InitElements(const godot::String &assetPath);
 
+    void _update_elements();
+
     godot::String AssetPath;
 
     godot::Label* title;
     godot::Button* GitLFSCheckoutButton;
+
+    godot::Callable update_elements_control;
 };
 
 class GitLFSInspectorPlugin : public godot::EditorInspectorPlugin
