@@ -13,6 +13,8 @@
 #include "godot_cpp/variant/callable.hpp"
 #include "godot_cpp/variant/utility_functions.hpp"
 #include "godot_cpp/classes/project_settings.hpp"
+#include "godot_cpp/classes/thread.hpp"
+#include "godot_cpp/classes/mutex.hpp"
 
 // CONSOLE RUNNING
 #include <cstdio>
@@ -22,18 +24,32 @@
 #include <string>
 #include <array>
 #include <thread>
+#include <stdio.h>
+#include <stdlib.h>
 // CONSOLE RUNNING
 
 enum LFSState
 {
     CheckedIn,
     CheckedOut,
-    Modified,
+    FailedCheckOut,
 
     NotLFS,
 
     Unknown
 };
+
+inline const char* LFSStateToString(LFSState state)
+{
+    switch(state)
+    {
+        case CheckedIn: return "CheckedIn";
+        case CheckedOut: return "CheckedOut";
+        case FailedCheckOut: return "FailedCheckout";
+        case NotLFS: return "NotLFS";
+        case Unknown: return "Unknown";
+    }
+}
 
 struct AssetInfo
 {
@@ -53,7 +69,8 @@ namespace
 CommandResult exec_command_with_cwd(std::string cmd)
 {
     int exitstatus = 255;
-    std::array<char, 1048576> buffer {};
+    //std::array<char, 1048576> buffer {};
+    char buffer[8192];
     std::string result;
 
 #ifdef _WIN32
@@ -81,13 +98,25 @@ CommandResult exec_command_with_cwd(std::string cmd)
             std::string("popen() failed!")
         };
     }
+
+    char* line = NULL;
+    size_t len = 0;
+
+    while (fgets(buffer, 8192, pipe))
+    {
+        puts(buffer);
+    }
     
+    /*
+    // For some reason I only get a single line back here
     std::size_t bytesread;
     while ((bytesread = fread(buffer.data(), sizeof(buffer.at(0)), sizeof(buffer), pipe)) != 0)
     {
         result += std::string(buffer.data(), bytesread);        
     }
+    */
 
+    result = buffer;
     exitstatus = WEXITSTATUS(pclose(pipe));
 
     return CommandResult
@@ -97,11 +126,48 @@ CommandResult exec_command_with_cwd(std::string cmd)
     };
 }
 
+std::string godotConvert(godot::String from)
+{
+    std::string converted = from.utf8().get_data();
+    return converted;
+}
+
+godot::String stdConvert(std::string from)
+{
+    godot::String converted = from.c_str();
+    return converted;
+}
+
+AssetInfo CheckAssetLock(AssetInfo &ainfo)
+{
+    std::string command = "git lfs locks -p " + godotConvert(ainfo.asset_path);
+    CommandResult result = exec_command_with_cwd(command);
+
+     if (result.exitcode != 0)
+    {
+        godot::String _result = result.output.c_str();
+        godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
+        ainfo.asset_state = LFSState::Unknown;
+    }
+
+    if (result.output.find("ID") != std::string::npos)
+    {
+        ainfo.asset_state = LFSState::CheckedOut;
+        godot::UtilityFunctions::print("Asset is LFS Checked Out");
+    }
+    ainfo.asset_state = LFSState::CheckedIn;
+    godot::UtilityFunctions::print("Asset is not checked out.");
+}
+
 AssetInfo GetAssetInfo(const godot::String &Asset)
 {
-    std::string _cmd = "git check-attr -a ";
+    std::string _cmd = "git check-attr filter ";
     std::string _asset = Asset.utf8().get_data();
     std::string command = _cmd + _asset;
+
+    AssetInfo ainfo;
+    ainfo.asset_path = Asset;
+    ainfo.asset_state = LFSState::Unknown;
     
     CommandResult result = exec_command_with_cwd(command);
 
@@ -110,35 +176,68 @@ AssetInfo GetAssetInfo(const godot::String &Asset)
         godot::String _result = result.output.c_str();
         godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
     }
-    
-    LFSState state;
-    godot::UtilityFunctions::print("GetAssetInfo: ", godot::String(result.output.c_str()));
 
     if (result.output.find("lfs") == std::string::npos)
     {
         godot::UtilityFunctions::print("File is not LFS tracked: ", Asset);
-        state = LFSState::NotLFS;
-
-        return AssetInfo 
-        {
-            Asset,
-            state
-        };
+        ainfo.asset_state = LFSState::NotLFS;
     }
     godot::UtilityFunctions::print("File is LFS tracked: ", Asset);
 
-    return AssetInfo
-    {
-        Asset,
-        LFSState::Unknown
-    };
+    CheckAssetLock(ainfo);
+
+    return ainfo;
 }
 
-}
-
-class GitLFSControl : public godot::Control
+void CheckOutAsset(AssetInfo &ainfo)
 {
-    GDCLASS(GitLFSControl, godot::Control)
+    std::string command = "git lfs lock " + godotConvert(ainfo.asset_path);
+    CommandResult result = exec_command_with_cwd(command);
+
+     if (result.exitcode != 0)
+    {
+        godot::String _result = result.output.c_str();
+        godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
+    }
+
+    if (result.output.find("Locked") == std::string::npos)
+    {
+        ainfo.asset_state = LFSState::FailedCheckOut;
+        godot::UtilityFunctions::push_warning("Failed to check out asset. Does someone else have a lock?", ainfo.asset_path);
+    }
+    else
+    {
+        ainfo.asset_state = LFSState::CheckedOut;
+    }
+}
+
+void CheckInAsset(AssetInfo &ainfo)
+{
+    std::string command = "git lfs unlock " + godotConvert(ainfo.asset_path);
+    CommandResult result = exec_command_with_cwd(command);
+
+     if (result.exitcode != 0)
+    {
+        godot::String _result = result.output.c_str();
+        godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
+    }
+
+    if (result.output.find("Locked") != std::string::npos)
+    {
+        ainfo.asset_state = LFSState::FailedCheckOut;
+        godot::UtilityFunctions::push_warning("Failed to check out asset. Is your asset modified?", ainfo.asset_path);
+    }
+    else
+    {
+        ainfo.asset_state = LFSState::CheckedIn;
+    }
+}
+
+}
+
+class GitLFSControl : public godot::VBoxContainer
+{
+    GDCLASS(GitLFSControl, godot::VBoxContainer)
 
 public:
 
@@ -150,7 +249,13 @@ public:
     void InitElements(const godot::String &assetPath);
 
     void _update_elements();
-    void update_elements_impl(AssetInfo ainfo);
+    void update_elements_impl();
+
+    void _check_out_asset();
+    void _check_out_asset_impl();
+
+    void _check_in_asset();
+    void _check_in_asset_impl();
 
     godot::String AssetPath;
 
@@ -161,10 +266,23 @@ public:
     godot::HBoxContainer* hLFSContainer;
     godot::Label* title;
     godot::Button* GitLFSCheckoutButton;
+    godot::Button* GitLFSCheckinButton;
 
     godot::Callable update_elements_control;
+    godot::Callable update_runner_caller;
+
+    godot::Callable check_out_runner;
+    godot::Callable check_out_runner_impl;
+
+    godot::Callable check_in_runner;
+    godot::Callable check_in_runner_impl;
 
     AssetInfo ainfo;
+    godot::Mutex* ainfo_mutex;
+
+    godot::Thread* update_thread;
+    godot::Thread* checkout_thread;
+    godot::Thread* checkin_thread;
 };
 
 class GitLFSInspectorPlugin : public godot::EditorInspectorPlugin
@@ -179,6 +297,7 @@ public:
     static void _bind_methods();
 
     bool _can_handle(Object* object) const;
+
 
     //bool _parse_property(Object *object, godot::Variant::Type type, const godot::String &name, godot::PropertyHint hint_type, const godot::String &hint_string, godot::BitField<godot::PropertyUsageFlags> usage_flags, bool wide) override;
     void _parse_category(Object *p_object, const godot::String &p_category) override;
