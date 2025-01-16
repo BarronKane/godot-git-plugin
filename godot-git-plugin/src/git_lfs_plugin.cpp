@@ -136,6 +136,7 @@ void GitLFSControl::_check_out_asset()
 
 void GitLFSControl::_check_out_asset_impl()
 {
+    godot::UtilityFunctions::print("Checking out IMPL");
     CheckOutAsset(ainfo);
     update_elements_impl();
 }
@@ -197,6 +198,16 @@ void GitLFSControl::update_elements_impl()
         GitLFSCheckoutButton->call_deferred("set_disabled", true);
         statusDisplay->call_deferred("set_text", "Unknown");
         GitLFSCheckoutButton->call_deferred("set_flat", true);
+
+        GitLFSCheckinButton->call_deferred("set_disabled", true);
+        GitLFSCheckinButton->call_deferred("set_flat", true);
+    }
+    if (ainfo.asset_state == LFSState::FailedCheckOut)
+    {
+        godot::UtilityFunctions::print("Status is CheckedIn");
+        GitLFSCheckoutButton->call_deferred("set_disabled", false);
+        statusDisplay->call_deferred("set_text", "Checkout Failed");
+        GitLFSCheckoutButton->call_deferred("set_flat", false);
 
         GitLFSCheckinButton->call_deferred("set_disabled", true);
         GitLFSCheckinButton->call_deferred("set_flat", true);
