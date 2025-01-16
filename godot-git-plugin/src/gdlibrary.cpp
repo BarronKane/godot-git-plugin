@@ -3,6 +3,7 @@
 
 #include "godot_cpp/core/class_db.hpp"
 #include "godot_cpp/classes/editor_plugin.hpp"
+#include "godot_cpp/classes/engine.hpp"
 #include "godot_cpp/godot.hpp"
 
 void initialize_git_plugin_module(godot::ModuleInitializationLevel p_level) {
@@ -12,7 +13,7 @@ void initialize_git_plugin_module(godot::ModuleInitializationLevel p_level) {
 
 	godot::ClassDB::register_class<GitPlugin>();
 
-	godot::ClassDB::register_class<GitLFSHBoxContainer>();
+	godot::ClassDB::register_class<GitLFSControl>();
 	godot::ClassDB::register_class<GitLFSInspectorPlugin>();
 	godot::ClassDB::register_class<GitLFSPlugin>();	
 

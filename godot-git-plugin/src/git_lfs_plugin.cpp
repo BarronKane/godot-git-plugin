@@ -1,60 +1,82 @@
 #include "git_lfs_plugin.h"
 
+#include "godot_cpp/classes/mutex.hpp"
 #include "godot_cpp/classes/button_group.hpp"
+#include "godot_cpp/classes/v_box_container.hpp"
+#include "godot_cpp/classes/h_box_container.hpp"
 #include "godot_cpp/classes/button.hpp"
 #include "godot_cpp/classes/label.hpp"
 
 #include "godot_cpp/core/class_db.hpp"
 #include "godot_cpp/classes/project_settings.hpp"
 #include "godot_cpp/variant/utility_functions.hpp"
+#include "godot_cpp/classes/thread.hpp"
 
-void GitLFSHBoxContainer::_bind_methods()
+void GitLFSControl::_bind_methods()
 {
-    godot::ClassDB::bind_method(godot::D_METHOD("_update_elements"), &GitLFSHBoxContainer::_update_elements);
+    godot::ClassDB::bind_method(godot::D_METHOD("_update_elements"), &GitLFSControl::_update_elements);
 }
 
-GitLFSHBoxContainer::GitLFSHBoxContainer()
+GitLFSControl::GitLFSControl()
 {
-    set_alignment(AlignmentMode::ALIGNMENT_CENTER);
-    set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
-
+    vContainer = memnew(godot::VBoxContainer);
+    hStatusContainer = memnew(godot::HBoxContainer);
+    statusText = memnew(godot::Label);
+    statusDisplay = memnew(godot::Label);
+    hLFSContainer = memnew(godot::HBoxContainer);
+    title = memnew(godot::Label);
     GitLFSCheckoutButton = memnew(godot::Button);
-    GitLFSCheckoutButton->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
-    GitLFSCheckoutButton->set_text("Git LFS Checkout");
-    GitLFSCheckoutButton->set_modulate(godot::Color(255, 255, 255));
-    GitLFSCheckoutButton->set_disabled(false);
-    GitLFSCheckoutButton->set_action_mode(godot::BaseButton::ActionMode::ACTION_MODE_BUTTON_PRESS);
-
-    GitLFSCheckoutButton->set_flat(false);
-    GitLFSCheckoutButton->set_text_alignment(godot::HorizontalAlignment::HORIZONTAL_ALIGNMENT_CENTER);
 }
 
-GitLFSHBoxContainer::~GitLFSHBoxContainer()
+GitLFSControl::~GitLFSControl()
 {
 }
 
-void GitLFSHBoxContainer::InitElements(const godot::String &assetPath)
+void GitLFSControl::InitElements(const godot::String &assetPath)
 {
     AssetPath = assetPath;
+    ainfo = GetAssetInfo(assetPath);
 
-    title = memnew(godot::Label);
-    title->set_text("Git LFS Controls");
+    add_child(vContainer);
+
+    vContainer->add_child(hStatusContainer);
+    hStatusContainer->add_child(statusText);
+    hStatusContainer->add_child(statusDisplay);
+
+    vContainer->add_child(hLFSContainer);
+    hLFSContainer->add_child(title);
+    hLFSContainer->add_child(GitLFSCheckoutButton);
+
+    hStatusContainer->set_alignment(godot::BoxContainer::ALIGNMENT_CENTER);
+    hStatusContainer->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
+
+    hLFSContainer->set_alignment(godot::BoxContainer::ALIGNMENT_CENTER);
+    hLFSContainer->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
+
+    statusText->set_text("LFS Status: ");
+
+    statusDisplay->set_text("Checking...");
+
+    title->set_text("Git LFS");
     title->set_modulate(godot::Color(255,255,255));
     title->set_horizontal_alignment(godot::HorizontalAlignment::HORIZONTAL_ALIGNMENT_LEFT);
     title->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
 
     update_elements_control = godot::Callable(this, "_update_elements");
 
-    GitLFSCheckoutButton = memnew(godot::Button);
-    GitLFSCheckoutButton->set_text("Checkout Asset");
+    GitLFSCheckoutButton->set_h_size_flags(godot::Control::SizeFlags::SIZE_EXPAND_FILL);
+    GitLFSCheckoutButton->set_text("Check Out Asset");
+    GitLFSCheckoutButton->set_modulate(godot::Color(255, 255, 255));
+    GitLFSCheckoutButton->set_disabled(true);
+
+    GitLFSCheckoutButton->set_flat(true);
+    GitLFSCheckoutButton->set_text_alignment(godot::HorizontalAlignment::HORIZONTAL_ALIGNMENT_CENTER);
+    
     GitLFSCheckoutButton->set_action_mode(godot::BaseButton::ACTION_MODE_BUTTON_PRESS);
     GitLFSCheckoutButton->connect("pressed", update_elements_control);
-
-    add_child(title);
-    add_child(GitLFSCheckoutButton);
 }
 
-void GitLFSHBoxContainer::_update_elements()
+void GitLFSControl::_update_elements()
 {
     title->set_text("Updated!");
 }
@@ -82,7 +104,7 @@ bool GitLFSInspectorPlugin::_can_handle(Object* object) const
     godot::Variant::Type type = static_cast<godot::Variant::Type>(object->get("resource_path").get_type());
     if (type != godot::Variant::NIL)
     {
-        return true;       
+        return true;
     }
 
     return false;
@@ -103,11 +125,10 @@ void GitLFSInspectorPlugin::_parse_category(Object *p_object, const godot::Strin
         const godot::String resource_path = p_object->get("resource_path");
         const godot::String resource_file = project_settings->globalize_path(resource_path);
 
-        GitLFSHBoxContainer* lfs_hbox_container = memnew(GitLFSHBoxContainer);
-        lfs_hbox_container->set_alignment(godot::BoxContainer::AlignmentMode::ALIGNMENT_CENTER);
-        lfs_hbox_container->InitElements(resource_file);
+        GitLFSControl* lfsControl = memnew(GitLFSControl);
+        lfsControl->InitElements(resource_file);
         
-        add_custom_control(lfs_hbox_container);
+        add_custom_control(lfsControl);
         /*
         godot::Button* pAddButton = memnew(godot::Button);
         pAddButton->set_text("Git LFS Checkout");
