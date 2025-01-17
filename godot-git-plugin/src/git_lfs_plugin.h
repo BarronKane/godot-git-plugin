@@ -49,6 +49,7 @@ inline const char* LFSStateToString(LFSState state)
         case FailedCheckOut: return "FailedCheckout";
         case NotLFS: return "NotLFS";
         case Unknown: return "Unknown";
+        default: return "No State";
     }
 }
 
