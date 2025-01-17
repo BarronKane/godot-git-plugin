@@ -15,6 +15,7 @@
 #include "godot_cpp/classes/project_settings.hpp"
 #include "godot_cpp/classes/thread.hpp"
 #include "godot_cpp/classes/mutex.hpp"
+#include "godot_cpp/classes/worker_thread_pool.hpp"
 
 // CONSOLE RUNNING
 #include <cstdio>
@@ -83,7 +84,7 @@ CommandResult exec_command_with_cwd(std::string cmd)
     godot::String project_path = project_settings->globalize_path("res://");
     std::string cwd = project_path.utf8().get_data();
 
-    std::string cwd_command = "cd " + cwd + " && ";
+    std::string cwd_command = "cd \"" + cwd + "\" && ";
     std::string command = cwd_command + cmd;
 
     FILE *pipe = popen(command.c_str(), "r");
@@ -138,89 +139,104 @@ godot::String stdConvert(std::string from)
     return converted;
 }
 
-AssetInfo CheckAssetLock(AssetInfo &ainfo)
+void CheckAssetLock(AssetInfo &ainfo)
 {
-    std::string command = "git lfs locks -p " + godotConvert(ainfo.asset_path);
+    std::string command = "git lfs locks -p \"" + godotConvert(ainfo.asset_path) + "\"";
     CommandResult result = exec_command_with_cwd(command);
-
-     if (result.exitcode != 0)
+    godot::UtilityFunctions::print("Running command: ", stdConvert(command));
+    godot::UtilityFunctions::print("Command result: ", stdConvert(result.output));
+    /*
+    if (result.exitcode != 0)
     {
         godot::String _result = result.output.c_str();
         godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
         ainfo.asset_state = LFSState::Unknown;
     }
+    */
 
     if (result.output.find("ID") != std::string::npos)
     {
         ainfo.asset_state = LFSState::CheckedOut;
         godot::UtilityFunctions::print("Asset is LFS Checked Out");
     }
-    ainfo.asset_state = LFSState::CheckedIn;
-    godot::UtilityFunctions::print("Asset is not checked out.");
+    else
+    {
+        ainfo.asset_state = LFSState::CheckedIn;
+        godot::UtilityFunctions::print("Asset is not checked out.");
+    }
+
+    godot::UtilityFunctions::print("Result: ", stdConvert(result.output));
 }
 
-AssetInfo GetAssetInfo(const godot::String &Asset)
+void GetAssetInfo(AssetInfo &ainfo)
 {
+    godot::UtilityFunctions::print("Running GetAssetInfo");
     std::string _cmd = "git check-attr filter ";
-    std::string _asset = Asset.utf8().get_data();
-    std::string command = _cmd + _asset;
-
-    AssetInfo ainfo;
-    ainfo.asset_path = Asset;
-    ainfo.asset_state = LFSState::Unknown;
+    std::string _asset = ainfo.asset_path.utf8().get_data();
+    std::string command = _cmd + "\"" + _asset + "\"";
     
     CommandResult result = exec_command_with_cwd(command);
 
+    /*
     if (result.exitcode != 0)
     {
         godot::String _result = result.output.c_str();
         godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
     }
+    */
 
     if (result.output.find("lfs") == std::string::npos)
     {
-        godot::UtilityFunctions::print("File is not LFS tracked: ", Asset);
+        godot::UtilityFunctions::print("File is not LFS tracked: ", ainfo.asset_path);
         ainfo.asset_state = LFSState::NotLFS;
     }
-    godot::UtilityFunctions::print("File is LFS tracked: ", Asset);
+    godot::UtilityFunctions::print("File is LFS tracked: ", ainfo.asset_path);
 
     CheckAssetLock(ainfo);
 
-    return ainfo;
+    godot::UtilityFunctions::print("Result: ", stdConvert(result.output));
 }
 
 void CheckOutAsset(AssetInfo &ainfo)
 {
-    std::string command = "git lfs lock " + godotConvert(ainfo.asset_path);
+    godot::UtilityFunctions::print("Running CheckOutAsset");
+    std::string command = "git lfs lock \"" + godotConvert(ainfo.asset_path) + "\"";
     CommandResult result = exec_command_with_cwd(command);
 
-     if (result.exitcode != 0)
+    /*
+    if (result.exitcode != 0)
     {
         godot::String _result = result.output.c_str();
         godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
     }
+    */
 
-    if (result.output.find("Locked") == std::string::npos)
+    if (result.output.find("Locked") != std::string::npos)
     {
-        ainfo.asset_state = LFSState::FailedCheckOut;
-        godot::UtilityFunctions::push_warning("Failed to check out asset. Does someone else have a lock?", ainfo.asset_path);
-    }
-    else
-    {
+        godot::UtilityFunctions::print("State changed to CheckedOut");
         ainfo.asset_state = LFSState::CheckedOut;
     }
+    else if (result.output.find("exists") != std::string::npos)
+    {
+        ainfo.asset_state = LFSState::CheckedIn;
+        godot::UtilityFunctions::print("Failed to check out asset. Does someone else have a lock?", ainfo.asset_path);
+    }
+
+    godot::UtilityFunctions::print("Result: ", stdConvert(result.output));
 }
 
 void CheckInAsset(AssetInfo &ainfo)
 {
-    std::string command = "git lfs unlock " + godotConvert(ainfo.asset_path);
+    std::string command = "git lfs unlock \"" + godotConvert(ainfo.asset_path) + "\"";
     CommandResult result = exec_command_with_cwd(command);
 
-     if (result.exitcode != 0)
+    /*
+    if (result.exitcode != 0)
     {
         godot::String _result = result.output.c_str();
         godot::UtilityFunctions::push_error("Git command returned with error: ", _result);
     }
+    */
 
     if (result.output.find("Locked") != std::string::npos)
     {
@@ -231,6 +247,8 @@ void CheckInAsset(AssetInfo &ainfo)
     {
         ainfo.asset_state = LFSState::CheckedIn;
     }
+
+    godot::UtilityFunctions::print("Result: ", stdConvert(result.output));
 }
 
 }
@@ -257,6 +275,8 @@ public:
     void _check_in_asset();
     void _check_in_asset_impl();
 
+    void _thread_pool_runner();
+
     godot::String AssetPath;
 
     godot::VBoxContainer* vContainer;
@@ -268,8 +288,8 @@ public:
     godot::Button* GitLFSCheckoutButton;
     godot::Button* GitLFSCheckinButton;
 
-    godot::Callable update_elements_control;
-    godot::Callable update_runner_caller;
+    godot::Callable update_elements_runner;
+    godot::Callable update_runner_runner_impl;
 
     godot::Callable check_out_runner;
     godot::Callable check_out_runner_impl;
@@ -277,12 +297,16 @@ public:
     godot::Callable check_in_runner;
     godot::Callable check_in_runner_impl;
 
+    godot::Callable thread_pool_runner;
+
     AssetInfo ainfo;
     godot::Mutex* ainfo_mutex;
 
-    godot::Thread* update_thread;
-    godot::Thread* checkout_thread;
-    godot::Thread* checkin_thread;
+    godot::Thread* thread_pool_loop;
+    std::vector<int64_t> thread_ids;
+    bool b_pool_shutdown;
+
+    godot::WorkerThreadPool* thread_pool;
 };
 
 class GitLFSInspectorPlugin : public godot::EditorInspectorPlugin

@@ -8,10 +8,12 @@
 #include "godot_cpp/classes/label.hpp"
 
 #include "godot_cpp/core/class_db.hpp"
+#include "godot_cpp/classes/engine.hpp"
 #include "godot_cpp/classes/project_settings.hpp"
 #include "godot_cpp/variant/utility_functions.hpp"
 #include "godot_cpp/classes/thread.hpp"
 #include "godot_cpp/classes/mutex.hpp"
+#include "godot_cpp/classes/worker_thread_pool.hpp"
 
 void GitLFSControl::_bind_methods()
 {
@@ -23,6 +25,8 @@ void GitLFSControl::_bind_methods()
 
     godot::ClassDB::bind_method(godot::D_METHOD("_check_in_asset"), &GitLFSControl::_check_in_asset);
     godot::ClassDB::bind_method(godot::D_METHOD("_check_in_asset_impl"), &GitLFSControl::_check_in_asset_impl);
+
+    godot::ClassDB::bind_method(godot::D_METHOD("_thread_pool_runner"), &GitLFSControl::_thread_pool_runner);
 }
 
 GitLFSControl::GitLFSControl()
@@ -36,30 +40,44 @@ GitLFSControl::GitLFSControl()
     GitLFSCheckoutButton = memnew(godot::Button);
     GitLFSCheckinButton = memnew(godot::Button);
 
+    /*
     update_thread = memnew(godot::Thread);
     checkout_thread = memnew(godot::Thread);
     checkin_thread = memnew(godot::Thread);
+    */
+    thread_pool_loop = memnew(godot::Thread);
 
-    update_runner_caller = godot::Callable(this, "update_elements_impl");
-    update_elements_control = godot::Callable(this, "_update_elements");
+    thread_pool = godot::WorkerThreadPool::get_singleton();
+
+    update_elements_runner = godot::Callable(this, "_update_elements");
+    update_runner_runner_impl = godot::Callable(this, "update_elements_impl");
 
     check_out_runner = godot::Callable(this, "_check_out_asset");
     check_out_runner_impl = godot::Callable(this, "_check_out_asset_impl");
 
     check_in_runner = godot::Callable(this, "_check_in_asset");
-    check_out_runner_impl = godot::Callable(this, "_check_in_asset_impl");
+    check_in_runner_impl = godot::Callable(this, "_check_in_asset_impl");
+
+    thread_pool_runner = godot::Callable(this, "_thread_pool_runner");
+    thread_ids = std::vector<int64_t>();
 
     ainfo_mutex = memnew(godot::Mutex);
 }
 
 GitLFSControl::~GitLFSControl()
 {
+    b_pool_shutdown = true;
 }
 
 void GitLFSControl::InitElements(const godot::String &assetPath)
 {
     AssetPath = assetPath;
-    ainfo = GetAssetInfo(assetPath);
+    ainfo = AssetInfo
+    {
+        assetPath,
+        LFSState::Unknown
+    };
+    GetAssetInfo(ainfo);
 
     add_child(vContainer);
 
@@ -110,55 +128,60 @@ void GitLFSControl::InitElements(const godot::String &assetPath)
     GitLFSCheckinButton->set_action_mode(godot::BaseButton::ACTION_MODE_BUTTON_PRESS);
     GitLFSCheckinButton->connect("pressed", check_in_runner);
 
+    b_pool_shutdown = false;
+    thread_pool_loop->start(thread_pool_runner);
+
     _update_elements();
 }
 
 void GitLFSControl::_update_elements()
 {
     godot::UtilityFunctions::print("Updating elements.");
-    ainfo_mutex->lock();
-    if (update_thread->is_alive())
-    {
-        update_thread->wait_to_finish();
-    }
-    update_thread->call_deferred("start", update_runner_caller);
+    thread_ids.push_back(thread_pool->add_task(update_runner_runner_impl));
+    //update_thread->call_deferred("start", update_runner_caller);
     //update_runner->start(update_runner_caller, godot::Thread::PRIORITY_LOW);
 }
 
 void GitLFSControl::_check_out_asset()
 {
     godot::UtilityFunctions::print("Checking out asset.");
-    ainfo_mutex->lock();
-    update_thread->wait_to_finish();
-    update_thread->call_deferred("start", check_out_runner_impl);
+    thread_ids.push_back(thread_pool->add_task(check_out_runner_impl));
+    //update_thread->wait_to_finish();
+    //update_thread->call_deferred("start", check_out_runner_impl);
     //update_runner->start(check_out_runner_impl, godot::Thread::PRIORITY_LOW);
 }
 
 void GitLFSControl::_check_out_asset_impl()
 {
     godot::UtilityFunctions::print("Checking out IMPL");
+    ainfo_mutex->lock();
     CheckOutAsset(ainfo);
+    ainfo_mutex->unlock();
     update_elements_impl();
 }
 
 void GitLFSControl::_check_in_asset()
 {
     godot::UtilityFunctions::print("Checking in asset.");
-    ainfo_mutex->lock();
-    update_thread->wait_to_finish();
-    update_thread->call_deferred("start", check_in_runner_impl);
+    thread_ids.push_back(thread_pool->add_task(check_in_runner_impl));
+    //update_thread->wait_to_finish();
+    //update_thread->call_deferred("start", check_in_runner_impl);
 }
 
 void GitLFSControl::_check_in_asset_impl()
 {
+    ainfo_mutex->lock();
     CheckInAsset(ainfo);
+    ainfo_mutex->unlock();
     update_elements_impl();
 }
 
 void GitLFSControl::update_elements_impl()
 {
     godot::String asset = ainfo.asset_path;
-    ainfo = GetAssetInfo(asset);
+    ainfo_mutex->lock();
+    GetAssetInfo(ainfo);
+    ainfo_mutex->unlock();
 
     godot::UtilityFunctions::print("CHECKING STATUS:");
     godot::UtilityFunctions::print("status precheck: ", godot::String(LFSStateToString(ainfo.asset_state)));
@@ -214,6 +237,22 @@ void GitLFSControl::update_elements_impl()
     }
     
     ainfo_mutex->unlock();
+}
+
+void GitLFSControl::_thread_pool_runner()
+{
+    while(!b_pool_shutdown && thread_ids.size() > 0)
+    {
+        for (int i; i < thread_ids.size(); i++)
+        {
+            godot::Error err = thread_pool->wait_for_task_completion(thread_ids[i]);
+            if (err != godot::Error::OK)
+            {   
+                godot::UtilityFunctions::push_warning("Thread pool error: ", err);
+                thread_ids.erase(thread_ids.begin() + i);
+            }            
+        }
+    }
 }
 
 /////////////////////////////////////////////////////////////
