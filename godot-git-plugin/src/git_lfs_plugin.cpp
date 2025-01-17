@@ -144,6 +144,8 @@ void GitLFSControl::_update_elements()
 
 void GitLFSControl::_check_out_asset()
 {
+    GitLFSCheckoutButton->call_deferred("set_disabled", true);
+    GitLFSCheckoutButton->call_deferred("set_flat", true);
     godot::UtilityFunctions::print("Checking out asset.");
     thread_ids.push_back(thread_pool->add_task(check_out_runner_impl));
     //update_thread->wait_to_finish();
@@ -162,6 +164,8 @@ void GitLFSControl::_check_out_asset_impl()
 
 void GitLFSControl::_check_in_asset()
 {
+    GitLFSCheckinButton->call_deferred("set_disabled", true);
+    GitLFSCheckinButton->call_deferred("set_flat", true);
     godot::UtilityFunctions::print("Checking in asset.");
     thread_ids.push_back(thread_pool->add_task(check_in_runner_impl));
     //update_thread->wait_to_finish();
@@ -235,15 +239,13 @@ void GitLFSControl::update_elements_impl()
         GitLFSCheckinButton->call_deferred("set_disabled", true);
         GitLFSCheckinButton->call_deferred("set_flat", true);
     }
-    
-    ainfo_mutex->unlock();
 }
 
 void GitLFSControl::_thread_pool_runner()
 {
     while(!b_pool_shutdown && thread_ids.size() > 0)
     {
-        for (int i; i < thread_ids.size(); i++)
+        for (int i = 0; i < thread_ids.size(); i++)
         {
             godot::Error err = thread_pool->wait_for_task_completion(thread_ids[i]);
             if (err != godot::Error::OK)
